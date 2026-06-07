@@ -1,47 +1,47 @@
 import { useState, useEffect } from "react";
- 
+
 const EVENT_BUFFER = 2;
- 
+
 const DEFAULT_COMMUTE = {
   inStart:  "07:30",
   inEnd:    "09:00",
   outStart: "17:00",
   outEnd:   "18:30",
 };
- 
+
 function timeToDecimal(t) {
   const [h, m] = t.split(":").map(Number);
   return h + m / 60;
 }
- 
+
 const VENUES = [
   { name: "AO Arena",       keywords: ["ao arena", "manchester arena"],          capacity: 21000 },
   { name: "Co-op Live",     keywords: ["co-op live", "coop live", "co op live"], capacity: 23500 },
   { name: "Etihad Stadium", keywords: ["etihad"],                                capacity: 53400 },
   { name: "Old Trafford",   keywords: ["old trafford"],                          capacity: 74000 },
 ];
- 
+
 const FOOTBALL_TEAMS = [
   { id: 65, name: "Manchester City",   venue: "Etihad Stadium", capacity: 53400 },
   { id: 66, name: "Manchester United", venue: "Old Trafford",   capacity: 74000 },
 ];
- 
+
 function matchApprovedVenue(event) {
   const venueName = event._embedded?.venues?.[0]?.name?.toLowerCase() || "";
   return VENUES.find(v => v.keywords.some(k => venueName.includes(k)));
 }
- 
+
 function getSeverity(capacity) {
   if (capacity >= 50000) return "red";
   if (capacity >= 15000) return "amber";
   return "green";
 }
- 
+
 function getEventHour(dateStr) {
   const d = new Date(dateStr);
   return d.getHours() + d.getMinutes() / 60;
 }
- 
+
 function affectsCommute(eventHour, commute) {
   const inStart  = timeToDecimal(commute.inStart);
   const inEnd    = timeToDecimal(commute.inEnd);
@@ -54,11 +54,11 @@ function affectsCommute(eventHour, commute) {
     pm: start <= outEnd && end >= outStart,
   };
 }
- 
+
 function formatTime(dateStr) {
   return new Date(dateStr).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
- 
+
 function normaliseFixture(match, team) {
   if (match.homeTeam?.id !== team.id) return null;
   const dateTime  = match.utcDate;
@@ -70,13 +70,13 @@ function normaliseFixture(match, team) {
     _embedded: { venues: [{ name: team.venue }] },
   };
 }
- 
+
 const SEV = {
   red:   { label: "HIGH IMPACT", bg: "bg-red-950",     border: "border-red-500",     dot: "bg-red-400",     badge: "bg-red-500/20 text-red-300 border border-red-500/40"      },
   amber: { label: "MODERATE",    bg: "bg-amber-950",   border: "border-amber-500",   dot: "bg-amber-400",   badge: "bg-amber-500/20 text-amber-300 border border-amber-500/40" },
   green: { label: "CLEAR",       bg: "bg-emerald-950", border: "border-emerald-700", dot: "bg-emerald-400", badge: "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" },
 };
- 
+
 function TimeInput({ label, value, onChange }) {
   return (
     <div className="flex flex-col gap-1">
@@ -86,7 +86,7 @@ function TimeInput({ label, value, onChange }) {
     </div>
   );
 }
- 
+
 function SettingsPanel({ commute, onChange, onClose }) {
   const [draft, setDraft] = useState({ ...commute });
   function update(key, val) { setDraft(d => ({ ...d, [key]: val })); }
@@ -118,7 +118,7 @@ function SettingsPanel({ commute, onChange, onClose }) {
     </div>
   );
 }
- 
+
 function LeaveAdvice({ severity, affects }) {
   if (severity === "green") return null;
   const mins     = severity === "red" ? 60 : 30;
@@ -130,7 +130,7 @@ function LeaveAdvice({ severity, affects }) {
     </p>
   );
 }
- 
+
 function EventCard({ event, commute }) {
   const dateTime  = event.dates.start.dateTime || event.dates.start.localDate + "T19:00:00";
   const hour      = getEventHour(dateTime);
@@ -160,7 +160,7 @@ function EventCard({ event, commute }) {
     </div>
   );
 }
- 
+
 function DaySummary({ events, commute }) {
   const worst = events.reduce((acc, e) => {
     const sev = getSeverity(e._capacity || matchApprovedVenue(e)?.capacity || 10000);
@@ -170,7 +170,7 @@ function DaySummary({ events, commute }) {
   }, "green");
   return <div className={`w-3 h-3 rounded-full ${SEV[worst].dot}`} />;
 }
- 
+
 function NextEventBanner({ events }) {
   const today = new Date(); today.setHours(0,0,0,0);
   const next  = events.find(e => { const d = new Date(e.dates.start.localDate); d.setHours(0,0,0,0); return d >= today; });
@@ -202,7 +202,7 @@ function NextEventBanner({ events }) {
     </div>
   );
 }
- 
+
 export default function App() {
   // Load saved values from localStorage on first render
   const [tmKey,        setTmKey]        = useState(() => localStorage.getItem("ci_tmKey")  || "");
@@ -211,7 +211,7 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem("ci_commute")) || DEFAULT_COMMUTE; }
     catch { return DEFAULT_COMMUTE; }
   });
- 
+
   const [events,       setEvents]       = useState([]);
   const [loading,      setLoading]      = useState(false);
   const [tmError,      setTmError]      = useState(null);
@@ -219,25 +219,25 @@ export default function App() {
   const [expandedDay,  setExpandedDay]  = useState(null);
   const [sources,      setSources]      = useState({ tm: false, fd: false });
   const [showSettings, setShowSettings] = useState(false);
- 
+
   // Auto-load if keys already saved
   useEffect(() => {
     if (tmKey || fdKey) { setSubmitted(true); fetchAll(tmKey, fdKey); }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
- 
+
   // Persist commute times whenever they change
   useEffect(() => {
     localStorage.setItem("ci_commute", JSON.stringify(commute));
   }, [commute]);
- 
+
   const today    = new Date();
   const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(today); d.setDate(today.getDate() + i); return d; });
- 
+
   async function fetchAll(tmApiKey, fdApiKey) {
     setLoading(true); setTmError(null);
     const allEvents = []; const loadedSources = { tm: false, fd: false };
- 
+
     if (tmApiKey) {
       try {
         const startDate = today.toISOString().split("T")[0] + "T00:00:00Z";
@@ -248,7 +248,7 @@ export default function App() {
         else { allEvents.push(...(data._embedded?.events || []).filter(matchApprovedVenue)); loadedSources.tm = true; }
       } catch (e) { setTmError(`Connection failed: ${e.message}`); }
     }
- 
+
     if (fdApiKey) {
       try {
         const dateFrom = today.toISOString().split("T")[0];
@@ -267,11 +267,11 @@ export default function App() {
         }
       } catch (_) {}
     }
- 
+
     allEvents.sort((a,b) => new Date(a.dates.start.dateTime||a.dates.start.localDate) - new Date(b.dates.start.dateTime||b.dates.start.localDate));
     setSources(loadedSources); setEvents(allEvents); setLoading(false);
   }
- 
+
   function handleSubmit() {
     if (!tmKey.trim() && !fdKey.trim()) return;
     // Save keys to localStorage
@@ -280,17 +280,17 @@ export default function App() {
     setSubmitted(true);
     fetchAll(tmKey.trim(), fdKey.trim());
   }
- 
+
   function handleCommuteChange(newCommute) {
     setCommute(newCommute);
   }
- 
+
   function getEventsForDay(date) {
     return events.filter(e => new Date(e.dates.start.localDate).toDateString() === date.toDateString());
   }
- 
+
   const totalImpacted = weekDays.filter(d => getEventsForDay(d).length > 0).length;
- 
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white" style={{ fontFamily: "'DM Mono', monospace" }}>
       <div className="border-b border-zinc-800 bg-zinc-900/80 backdrop-blur sticky top-0 z-10">
@@ -314,9 +314,9 @@ export default function App() {
           </div>
         </div>
       </div>
- 
+
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
- 
+
         {!submitted && (
           <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-5 space-y-4">
             <h2 className="text-sm font-bold text-zinc-200 uppercase tracking-widest">Connect Data Sources</h2>
@@ -338,28 +338,28 @@ export default function App() {
             </button>
           </div>
         )}
- 
+
         {showSettings && submitted && (
           <SettingsPanel commute={commute} onChange={handleCommuteChange} onClose={() => setShowSettings(false)} />
         )}
- 
+
         {loading && (
           <div className="text-center py-12">
             <div className="inline-block w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
             <p className="text-zinc-400 text-sm">Fetching events & fixtures...</p>
           </div>
         )}
- 
+
         {tmError && (
           <div className="rounded-lg border border-red-800 bg-red-950 p-4 text-sm text-red-300">
             ⚠️ {tmError} — <button onClick={() => { setSubmitted(false); setTmError(null); }} className="underline text-red-200">try again</button>
           </div>
         )}
- 
+
         {submitted && !loading && (
           <>
             <NextEventBanner events={events} />
- 
+
             <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs uppercase tracking-widest text-zinc-500">This Week</p>
@@ -389,7 +389,7 @@ export default function App() {
                 ))}
               </div>
             </div>
- 
+
             {weekDays.map((d, i) => {
               if (expandedDay !== d.toDateString()) return null;
               const dayEvents = getEventsForDay(d);
@@ -407,7 +407,7 @@ export default function App() {
                 </div>
               );
             })}
- 
+
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 text-xs text-zinc-500 space-y-1">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-zinc-400 font-semibold uppercase tracking-widest text-xs">Your Commute Windows</p>
