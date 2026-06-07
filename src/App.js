@@ -205,12 +205,9 @@ function NextEventBanner({ events }) {
 
 export default function App() {
   // Load saved values from localStorage on first render
-  const [tmKey,        setTmKey]        = useState(() => localStorage.getItem("ci_tmKey")  || "");
-  const [fdKey,        setFdKey]        = useState(() => localStorage.getItem("ci_fdKey")  || "");
-  const [commute,      setCommute]      = useState(() => {
-    try { return JSON.parse(localStorage.getItem("ci_commute")) || DEFAULT_COMMUTE; }
-    catch { return DEFAULT_COMMUTE; }
-  });
+  const [tmKey,        setTmKey]        = useState("tjIDz3OGsQYR287THUAbkMrGw8U6HYXq");
+  const [fdKey,        setFdKey]        = useState("1768ce62949f452c823b4ca4def961d3");
+  const [commute,      setCommute]      = useState(DEFAULT_COMMUTE);
 
   const [events,       setEvents]       = useState([]);
   const [loading,      setLoading]      = useState(false);
@@ -274,9 +271,6 @@ export default function App() {
 
   function handleSubmit() {
     if (!tmKey.trim() && !fdKey.trim()) return;
-    // Save keys to localStorage
-    localStorage.setItem("ci_tmKey", tmKey.trim());
-    localStorage.setItem("ci_fdKey", fdKey.trim());
     setSubmitted(true);
     fetchAll(tmKey.trim(), fdKey.trim());
   }
