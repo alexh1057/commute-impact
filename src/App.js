@@ -1,8 +1,18 @@
 import { useState } from "react";
 
-const COMMUTE_IN  = { start: 7.5,  end: 9    };
-const COMMUTE_OUT = { start: 17,   end: 18.5 };
 const EVENT_BUFFER = 2;
+
+const DEFAULT_COMMUTE = {
+  inStart:  "07:30",
+  inEnd:    "09:00",
+  outStart: "17:00",
+  outEnd:   "18:30",
+};
+
+function timeToDecimal(t) {
+  const [h, m] = t.split(":").map(Number);
+  return h + m / 60;
+}
 
 const VENUES = [
   { name: "AO Arena",       keywords: ["ao arena", "manchester arena"],          capacity: 21000 },
@@ -32,12 +42,16 @@ function getEventHour(dateStr) {
   return d.getHours() + d.getMinutes() / 60;
 }
 
-function affectsCommute(eventHour) {
+function affectsCommute(eventHour, commute) {
+  const inStart  = timeToDecimal(commute.inStart);
+  const inEnd    = timeToDecimal(commute.inEnd);
+  const outStart = timeToDecimal(commute.outStart);
+  const outEnd   = timeToDecimal(commute.outEnd);
   const start = eventHour - EVENT_BUFFER;
   const end   = eventHour + EVENT_BUFFER;
   return {
-    am: start <= COMMUTE_IN.end  && end >= COMMUTE_IN.start,
-    pm: start <= COMMUTE_OUT.end && end >= COMMUTE_OUT.start,
+    am: start <= inEnd  && end >= inStart,
+    pm: start <= outEnd && end >= outStart,
   };
 }
 
@@ -51,9 +65,7 @@ function normaliseFixture(match, team) {
   const localDate = dateTime.split("T")[0];
   return {
     name: `${team.name} vs ${match.awayTeam?.name || "Unknown"}`,
-    _type: "fixture",
-    _capacity: team.capacity,
-    _venueName: team.venue,
+    _type: "fixture", _capacity: team.capacity, _venueName: team.venue,
     dates: { start: { dateTime, localDate } },
     _embedded: { venues: [{ name: team.venue }] },
   };
@@ -64,6 +76,54 @@ const SEV = {
   amber: { label: "MODERATE",    bg: "bg-amber-950",   border: "border-amber-500",   dot: "bg-amber-400",   badge: "bg-amber-500/20 text-amber-300 border border-amber-500/40" },
   green: { label: "CLEAR",       bg: "bg-emerald-950", border: "border-emerald-700", dot: "bg-emerald-400", badge: "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" },
 };
+
+function TimeInput({ label, value, onChange }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs text-zinc-500 uppercase tracking-wider">{label}</label>
+      <input
+        type="time" value={value} onChange={e => onChange(e.target.value)}
+        className="bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 font-mono"
+      />
+    </div>
+  );
+}
+
+function SettingsPanel({ commute, onChange, onClose }) {
+  const [draft, setDraft] = useState({ ...commute });
+  function update(key, val) { setDraft(d => ({ ...d, [key]: val })); }
+  function save() { onChange(draft); onClose(); }
+
+  return (
+    <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold text-zinc-200 uppercase tracking-widest">Commute Times</h2>
+        <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-xs">✕ Cancel</button>
+      </div>
+
+      <div>
+        <p className="text-xs text-zinc-500 mb-3">🌅 Morning inbound</p>
+        <div className="grid grid-cols-2 gap-3">
+          <TimeInput label="Leave by" value={draft.inStart} onChange={v => update("inStart", v)} />
+          <TimeInput label="Arrive by" value={draft.inEnd}   onChange={v => update("inEnd",   v)} />
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs text-zinc-500 mb-3">🌆 Evening outbound</p>
+        <div className="grid grid-cols-2 gap-3">
+          <TimeInput label="Leave by" value={draft.outStart} onChange={v => update("outStart", v)} />
+          <TimeInput label="Arrive by" value={draft.outEnd}  onChange={v => update("outEnd",   v)} />
+        </div>
+      </div>
+
+      <button onClick={save}
+        className="w-full bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold py-2.5 rounded-lg transition-colors tracking-wide uppercase">
+        Save Times
+      </button>
+    </div>
+  );
+}
 
 function LeaveAdvice({ severity, affects }) {
   if (severity === "green") return null;
@@ -77,12 +137,12 @@ function LeaveAdvice({ severity, affects }) {
   );
 }
 
-function EventCard({ event }) {
+function EventCard({ event, commute }) {
   const dateTime  = event.dates.start.dateTime || event.dates.start.localDate + "T19:00:00";
   const hour      = getEventHour(dateTime);
   const capacity  = event._capacity || matchApprovedVenue(event)?.capacity || 10000;
   const severity  = getSeverity(capacity);
-  const affects   = affectsCommute(hour);
+  const affects   = affectsCommute(hour, commute);
   const cfg       = SEV[severity];
   const venueName = event._venueName || event._embedded?.venues?.[0]?.name || "Manchester Venue";
 
@@ -108,7 +168,7 @@ function EventCard({ event }) {
   );
 }
 
-function DaySummary({ events }) {
+function DaySummary({ events, commute }) {
   const worst = events.reduce((acc, e) => {
     const sev = getSeverity(e._capacity || matchApprovedVenue(e)?.capacity || 10000);
     if (sev === "red") return "red";
@@ -122,7 +182,6 @@ function NextEventBanner({ events }) {
   const today = new Date(); today.setHours(0,0,0,0);
   const next  = events.find(e => { const d = new Date(e.dates.start.localDate); d.setHours(0,0,0,0); return d >= today; });
   if (!next) return null;
-
   const nextDate  = new Date(next.dates.start.localDate); nextDate.setHours(0,0,0,0);
   const daysAway  = Math.round((nextDate - today) / 86400000);
   const capacity  = next._capacity || matchApprovedVenue(next)?.capacity || 10000;
@@ -130,7 +189,6 @@ function NextEventBanner({ events }) {
   const venueName = next._venueName || next._embedded?.venues?.[0]?.name || "Manchester Venue";
   const daysLabel = daysAway === 0 ? "Today" : daysAway === 1 ? "Tomorrow" : `${daysAway} days away`;
   const dateLabel = new Date(next.dates.start.localDate).toLocaleDateString("en-GB", { weekday:"long", day:"numeric", month:"long" });
-
   return (
     <div className={`rounded-xl border ${cfg.border} bg-zinc-900 p-4`}>
       <div className="flex items-center justify-between mb-3">
@@ -161,6 +219,8 @@ export default function App() {
   const [submitted,   setSubmitted]   = useState(false);
   const [expandedDay, setExpandedDay] = useState(null);
   const [sources,     setSources]     = useState({ tm: false, fd: false });
+  const [commute,     setCommute]     = useState(DEFAULT_COMMUTE);
+  const [showSettings, setShowSettings] = useState(false);
 
   const today    = new Date();
   const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(today); d.setDate(today.getDate() + i); return d; });
@@ -227,6 +287,12 @@ export default function App() {
               <span className={`text-xs px-1.5 py-0.5 rounded ${sources.tm ? "bg-blue-900 text-blue-300" : "bg-zinc-800 text-zinc-500"}`}>TM</span>
               <span className={`text-xs px-1.5 py-0.5 rounded ${sources.fd ? "bg-green-900 text-green-300" : "bg-zinc-800 text-zinc-500"}`}>FD</span>
             </>}
+            {submitted && (
+              <button onClick={() => setShowSettings(s => !s)}
+                className={`text-xs px-2 py-0.5 rounded border transition-colors ${showSettings ? "border-blue-500 text-blue-300 bg-blue-900/30" : "border-zinc-700 text-zinc-400 hover:text-zinc-200"}`}>
+                ⏱ Times
+              </button>
+            )}
             <p className="text-xs font-mono text-zinc-300">{today.toLocaleDateString("en-GB", { day:"numeric", month:"short" })}</p>
           </div>
         </div>
@@ -254,6 +320,10 @@ export default function App() {
               Load Events
             </button>
           </div>
+        )}
+
+        {showSettings && submitted && (
+          <SettingsPanel commute={commute} onChange={setCommute} onClose={() => setShowSettings(false)} />
         )}
 
         {loading && (
@@ -288,7 +358,7 @@ export default function App() {
                       className={`flex flex-col items-center gap-1.5 py-2 px-1 rounded-lg transition-all ${isExpanded?"bg-zinc-700":"hover:bg-zinc-800"} ${isToday?"ring-1 ring-blue-500/50":""}`}>
                       <span className={`text-xs uppercase ${isToday?"text-blue-400":"text-zinc-500"}`}>{d.toLocaleDateString("en-GB",{weekday:"short"}).slice(0,2)}</span>
                       <span className={`text-sm font-bold ${isToday?"text-blue-300":"text-zinc-300"}`}>{d.getDate()}</span>
-                      {dayEvents.length > 0 ? <DaySummary events={dayEvents} /> : <div className="w-3 h-3 rounded-full bg-zinc-700" />}
+                      {dayEvents.length > 0 ? <DaySummary events={dayEvents} commute={commute} /> : <div className="w-3 h-3 rounded-full bg-zinc-700" />}
                     </button>
                   );
                 })}
@@ -315,16 +385,19 @@ export default function App() {
                   </div>
                   {dayEvents.length === 0
                     ? <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-center"><p className="text-emerald-400 text-sm font-bold">✓ Clear</p><p className="text-zinc-500 text-xs mt-1">No major events near your route today</p></div>
-                    : dayEvents.map((e, j) => <EventCard key={j} event={e} />)
+                    : dayEvents.map((e, j) => <EventCard key={j} event={e} commute={commute} />)
                   }
                 </div>
               );
             })}
 
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 text-xs text-zinc-500 space-y-1">
-              <p className="text-zinc-400 font-semibold uppercase tracking-widest text-xs mb-2">Your Commute Windows</p>
-              <p>🌅 Inbound: <span className="text-zinc-300">07:30 – 09:00</span></p>
-              <p>🌆 Outbound: <span className="text-zinc-300">17:00 – 18:30</span></p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-zinc-400 font-semibold uppercase tracking-widest text-xs">Your Commute Windows</p>
+                <button onClick={() => setShowSettings(s => !s)} className="text-blue-400 underline text-xs">Edit</button>
+              </div>
+              <p>🌅 Inbound: <span className="text-zinc-300">{commute.inStart} – {commute.inEnd}</span></p>
+              <p>🌆 Outbound: <span className="text-zinc-300">{commute.outStart} – {commute.outEnd}</span></p>
               <p>📍 Route: <span className="text-zinc-300">Warrington ↔ Manchester</span></p>
               <div className="pt-2 mt-2 border-t border-zinc-800 flex gap-3 flex-wrap">
                 <span className={sources.tm?"text-blue-400":"text-zinc-600"}>● Ticketmaster {sources.tm?"connected":"not used"}</span>
